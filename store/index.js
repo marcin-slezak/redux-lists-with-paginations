@@ -7,10 +7,11 @@ const reducer = combineReducers({
 
 const middleware = [...getDefaultMiddleware()];
 
-export const getStore = () => {
+export const getStore = (preloadedState = {}) => {
   return configureStore({
     reducer,
     middleware,
     devTools: process.env.NODE_ENV !== 'production',
+    preloadedState
   });
 };

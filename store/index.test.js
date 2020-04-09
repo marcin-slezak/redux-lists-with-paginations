@@ -1,75 +1,85 @@
+import configureMockStore from 'redux-mock-store'
+import thunk from "redux-thunk";
 import { getStore } from '../store';
-import { listWithPagination, listSelector } from './ducks';
+import { listWithPagination } from './ducks';
 
-test('start with empty list', () => {
-    const store = getStore();
-    expect(store.getState().listWithPagination).toEqual({ lists: [] })
-})
-
-test('declare firsy list and list selector', async () => {
-    const store = getStore();
-    const list = {
-        name: 'files',
-        page: 0,
-        total: 0,
-        offset:0,
-        data: [],
-        limit: 0,
-        url: false,
-        requestStatus: false
-    };
-    await store.dispatch(listWithPagination.actions.addList({name: 'files'}));
-    expect(store.getState().listWithPagination).toEqual({
-        lists: [list]
+describe('reducers', () => {
+    test('increment page', () => {
+        const prevState = {
+            listA: { data: [], page: 1 },
+            listB: { data: [], page: 2 }
+        };
+        const action = { payload: { name: 'listB', page: 3 } };
+        expect(listWithPagination.caseReducers.updateListPage(prevState, action)).toEqual({
+            listA: { data: [], page: 1 },
+            listB: { data: [], page: 3 },
+        });
     });
-})
+});
 
-test('empty list selector', async () => {
-    const store = getStore();
-    const filesListSelector = listSelector('files');
-    expect(filesListSelector(store.getState().listWithPagination)).toBe(undefined);
-})
-
-test('list selector', async () => {
-    const store = getStore();
-    const filesListSelector = listSelector('files');
-    const list = {
-        name: 'files',
-        page: 0,
-        total: 0,
-        offset:0,
-        data: [],
-        limit: 0,
-        url: false,
-        requestStatus: false
-    };
-    await store.dispatch(listWithPagination.actions.addList({name: 'files'}));
-    expect(filesListSelector(store.getState().listWithPagination)).toEqual(list);
-})
-
-test('load data', async () => {
-    
-    const serverResponse = {
-        total: 20,
-        data: [0,1,2,3,4,5,6,7,8,9],
-    };
-    global.fetch = jest.fn().mockResolvedValueOnce({ json: jest.fn().mockResolvedValueOnce({ ...serverResponse }) })
-    const store = getStore();
-    const nextUserStates = [];
-    store.subscribe(() => { nextUserStates.push(store.getState().listWithPagination.lists) });
-    await store.dispatch(listWithPagination.actions.addList({name: 'files', url: 'someTestUrl'}));
-    await store.dispatch(listWithPagination.actions.load('files'));
-    expect(store.getState().listWithPagination).toEqual({
-        lists: [{
-            name: 'files',
-            page: 0,
-            total: 20,
-            offset:0,
-            data: [0,1,2,3,4,5,6,7,8,9],
-            limit: 0,
-            url: 'someTestUrl',
-            requestStatus: listWithPagination.REQUEST_STATUS.SUCCESS
-        }]
+describe('action creators', () => {
+    test('load next page', async () => {
+        const dispatch = jest.fn();
+        const getState = jest.fn().mockReturnValueOnce({ listWithPagination: { listA: { data: [], page: 1 } } });
+        await listWithPagination.actions.loadNextPage({ name: 'listA' })(dispatch, getState);
+        expect(dispatch.mock.calls.length).toBe(2);
+        // console.log(dispatch.mock.calls);
+        // [
+        //     [{ type: 'lists-with-pagination/updateListPage', payload: [Object] }],
+        //     [ [Function: _callee] ]
+        // ]
     });
-    console.log(nextUserStates)
+
+    test('load next page with mockStore', async () => {
+        const serverResponse = {
+            list: [1, 2],
+        };
+        const json = () => Promise.resolve(serverResponse);
+        global.fetch = () => Promise.resolve({ json })
+        const middlewares = [thunk]
+        const getMockStore = configureMockStore(middlewares);
+        const mockStore = getMockStore({ listWithPagination: { listA: { data: [], page: 1 } } });
+        await mockStore.dispatch(listWithPagination.actions.loadNextPage({ name: 'listA' }));
+        expect(mockStore.getActions()).toEqual(
+            [
+                {
+                    type: 'lists-with-pagination/updateListPage',
+                    payload: { name: 'listA', page: 2 }
+                },
+                {
+                    type: 'lists-with-pagination/updateListRequestStatus',
+                    payload: { name: 'listA', requestStatus: 'PENDING' }
+                },
+                {
+                    type: 'lists-with-pagination/updateListData',
+                    payload: { name: 'listA', data: [1, 2] }
+                },
+                {
+                    type: 'lists-with-pagination/updateListRequestStatus',
+                    payload: { name: 'listA', requestStatus: 'SUCCESS' }
+                }
+            ]
+        )
+    });
+});
+
+describe('full redux store test', () => {
+    test('load next page', async () => {
+        const serverResponse = {
+            list: [1, 2],
+        };
+        const json = () => Promise.resolve(serverResponse);
+        global.fetch = () => Promise.resolve({ json })
+        const store = getStore({ listWithPagination: { listA: { data: [], page: 1 } } });
+        await store.dispatch(listWithPagination.actions.loadNextPage({ name: 'listA' }));
+        expect(store.getState()).toEqual({ 
+            listWithPagination: { 
+                listA: { 
+                    data: [1, 2], 
+                    page: 2, 
+                    requestStatus: listWithPagination.REQUEST_STATUS.SUCCESS 
+                }
+            }
+        });
+    })
 })
